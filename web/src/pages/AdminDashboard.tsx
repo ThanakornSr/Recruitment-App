@@ -291,8 +291,15 @@ export default function AdminDashboard() {
           style={{ width: 250 }}
         />
       </Group>
-      <Table striped highlightOnHover>
-        <Table.Thead>
+      {rows.length === 0 ? (
+        <Paper p="xl" radius="md" withBorder>
+          <Text ta="center" c="dimmed" size="lg" mih={200} display="flex" style={{ alignItems: 'center', justifyContent: 'center' }}>
+            No applications found{status ? ` with status "${statusOptions.find(opt => opt.value === status)?.label || status}"` : ''}
+          </Text>
+        </Paper>
+      ) : (
+        <Table striped highlightOnHover>
+          <Table.Thead>
           <Table.Tr>
             <Table.Th>Photo</Table.Th>
             <Table.Th>Name</Table.Th>
@@ -446,8 +453,9 @@ export default function AdminDashboard() {
               </Table.Td>
             </Table.Tr>
           ))}
-        </Table.Tbody>
-      </Table>
+          </Table.Tbody>
+        </Table>
+      )}
     </div>
   );
 }

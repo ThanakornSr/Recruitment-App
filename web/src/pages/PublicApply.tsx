@@ -142,10 +142,10 @@ export default function PublicApply() {
   return (
     <Box maw={800} mx="auto" p="md">
       <Group justify="flex-end" mb="md">
-        <Button 
-          component={Link} 
-          to="/login" 
-          variant="outline" 
+        <Button
+          component={Link}
+          to="/login"
+          variant="outline"
           leftSection={<IconLogin size={16} />}
         >
           Admin Login
