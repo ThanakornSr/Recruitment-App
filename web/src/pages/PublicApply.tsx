@@ -182,6 +182,7 @@ export default function PublicApply() {
               value={formData.phone}
               onChange={(e) => handleInputChange("phone", e.target.value)}
               placeholder="+1234567890"
+              type="number"
             />
             <DateInput
               label="Date of Birth (Optional)"
