@@ -19,7 +19,7 @@ A full-stack recruitment management system built with modern web technologies. T
 - **Framework**: React 18 with TypeScript
 - **Build Tool**: Vite
 - **UI Components**: Mantine UI
-- **State Management**: React Query
+- **State Management / Data Fetching**: TanStack Query
 - **Routing**: React Router v6
 - **HTTP Client**: Axios
 - **Icons**: Tabler Icons
