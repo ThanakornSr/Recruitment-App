@@ -5,6 +5,7 @@ A full-stack recruitment management system built with modern web technologies. T
 ## 🚀 Tech Stack
 
 ### Backend
+
 - **Runtime**: Node.js with TypeScript
 - **Framework**: Express.js
 - **Database**: SQLite with Prisma ORM
@@ -14,6 +15,7 @@ A full-stack recruitment management system built with modern web technologies. T
 - **Validation**: Express Validator
 
 ### Frontend
+
 - **Framework**: React 18 with TypeScript
 - **Build Tool**: Vite
 - **UI Components**: Mantine UI
@@ -25,11 +27,13 @@ A full-stack recruitment management system built with modern web technologies. T
 ## ✨ Features
 
 ### Applicant Portal
+
 - Submit job applications with personal details
 - Upload resume, cover letter, and profile photo
 - View application status
 
 ### Admin Dashboard
+
 - Secure JWT authentication
 - Manage applications (view, filter, sort)
 - Update application status (PENDING, IN_REVIEW, INTERVIEW, etc.)
@@ -38,6 +42,7 @@ A full-stack recruitment management system built with modern web technologies. T
 - Responsive design for all devices
 
 ### System Features
+
 - File upload handling with proper validation
 - Real-time status updates
 - Clean and intuitive user interface
@@ -53,38 +58,45 @@ A full-stack recruitment management system built with modern web technologies. T
 ### Installation
 
 1. **Clone the repository**
+
    ```bash
    git clone https://github.com/yourusername/recruitment-system.git
    cd recruitment-system
    ```
 
 2. **Set up the backend**
+
    ```bash
    cd server
    cp .env.example .env  # Update environment variables as needed
    npm install
-   
+
    # Set up database
    npm run db:setup
-   
+
    # Start development server
    npm run dev
    ```
+
    Server will be running at http://localhost:4000
 
 3. **Set up the frontend**
+
    ```bash
    cd ../web
+   cp .env.example .env  # Update environment variables as needed
    npm install
-   
+
    # Start development server
    npm run dev
    ```
+
    Web app will be available at http://localhost:5173
 
 ### Environment Variables
 
 #### Server (`.env`)
+
 ```
 PORT=4000
 JWT_SECRET=your_jwt_secret
@@ -94,25 +106,28 @@ ALLOWED_ORIGINS=http://localhost:5173
 ```
 
 #### Frontend (`.env`)
+
 ```
 VITE_API_BASE=http://localhost:4000
 ```
 
 #### Admin User
+
 ```
 ADMIN_EMAIL=admin@demo.com
 ADMIN_PASSWORD=admin123
 ```
 
-
 ## 📚 API Documentation
 
 ### Authentication
+
 - `POST /auth/login` - User login
 - `POST /auth/logout` - Invalidate session
 - `GET /auth/me` - Get current user session
 
 ### Applications
+
 - `POST /applications/submit` - Submit new application (public)
 - `GET /applications` - List all applications (admin)
 - `GET /applications/:id` - Get application details (admin)
@@ -122,6 +137,7 @@ ADMIN_PASSWORD=admin123
 - `DELETE /applications/:id` - Delete application (admin)
 
 ### Files
+
 - `POST /api/upload` - Upload files
 
 ## 🛠 Development
@@ -129,13 +145,14 @@ ADMIN_PASSWORD=admin123
 ### Database Management
 
 1. **Prisma Commands**
+
    ```bash
    # Generate Prisma Client
    npx prisma generate
-   
+
    # Apply migrations
    npx prisma db push
-   
+
    # Open Prisma Studio (GUI for DB)
    npx prisma studio
    ```

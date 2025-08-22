@@ -16,9 +16,10 @@ import {
 import { DateInput } from "@mantine/dates";
 import { useMutation } from "@tanstack/react-query";
 import { api } from "../api";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { AxiosError } from "axios";
 import { notifications } from "@mantine/notifications";
+import { IconLogin } from "@tabler/icons-react";
 
 const POSITIONS = [
   { value: "Software Engineer", label: "Software Engineer" },
@@ -139,8 +140,18 @@ export default function PublicApply() {
   }
 
   return (
-    <Box p="md">
-      <Paper p="xl" radius="md" withBorder style={{ maxWidth: 800 }} mx="auto">
+    <Box maw={800} mx="auto" p="md">
+      <Group justify="flex-end" mb="md">
+        <Button 
+          component={Link} 
+          to="/login" 
+          variant="outline" 
+          leftSection={<IconLogin size={16} />}
+        >
+          Admin Login
+        </Button>
+      </Group>
+      <Paper withBorder p="xl" shadow="md" radius="md">
         <form onSubmit={handleSubmit}>
           <Stack gap="md">
             <Title order={2}>Job Application</Title>
