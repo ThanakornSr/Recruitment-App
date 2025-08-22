@@ -22,7 +22,7 @@ import { useCallback, useContext, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { AuthContext } from "../contexts/AuthContext";
-import { Application } from "../@types";
+import { Application, ApplicationStatus } from "../@types";
 
 const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:4000/api";
 const FILE_BASE = API_BASE.replace(/\/api$/, "");
@@ -33,10 +33,11 @@ export default function AdminDashboard() {
 
   // State
   const [rows, setRows] = useState<Application[]>([]);
-  const [status, setStatus] = useState<string | null>("");
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
-  const [tab, setTab] = useState<string>("AWAIT_INTERVIEW");
+  const [tab, setTab] = useState<"PENDING" | "WAIT_RESULT" | "OUTCOME">(
+    "PENDING"
+  );
 
   const [opened, setOpened] = useState(false);
   const [selectedApplication, setSelectedApplication] =
@@ -47,7 +48,6 @@ export default function AdminDashboard() {
   // Auth redirect
   useEffect(() => {
     if (authLoading) return;
-
     if (!user) navigate("/login", { replace: true });
     if (!isAdmin) {
       navigate("/", { replace: true });
@@ -66,12 +66,10 @@ export default function AdminDashboard() {
     try {
       setLoading(true);
       setError(null);
-
       const token = localStorage.getItem("token");
       if (!token) throw new Error("No authentication token found");
 
       const response = await api.raw.get<Application[]>("/admin/applications", {
-        params: { status: status || "" },
         headers: { Authorization: `Bearer ${token}` },
         validateStatus: () => true,
       });
@@ -93,17 +91,19 @@ export default function AdminDashboard() {
     } finally {
       setLoading(false);
     }
-  }, [status, user, isAdmin]);
+  }, [user, isAdmin]);
 
   useEffect(() => {
     loadApplications();
   }, [loadApplications]);
 
   // Helpers
-  const getStatusLabel = (status: string) => {
+  const getStatusLabel = (status: ApplicationStatus | string) => {
     switch (status) {
       case "PENDING":
         return "Pending";
+      case "SCHEDULED":
+        return "Interview Scheduled";
       case "WAIT_RESULT":
         return "Awaiting Result";
       case "PASS_INTERVIEW":
@@ -117,10 +117,11 @@ export default function AdminDashboard() {
     }
   };
 
-  const getStatusColor = (status: string) => {
+  const getStatusColor = (status: ApplicationStatus | string) => {
     switch (status) {
       case "PENDING":
         return "yellow";
+      case "SCHEDULED":
       case "WAIT_RESULT":
         return "blue";
       case "PASS_INTERVIEW":
@@ -138,31 +139,48 @@ export default function AdminDashboard() {
     return file?.filePath || "";
   };
 
+  const getLatestApplicationStatus = (
+    row: Application
+  ): ApplicationStatus | string => {
+    const latest = row.applications?.[row.applications.length - 1];
+    return latest?.status || row.status;
+  };
+
   // Handle status update
   const handleStatusUpdate = async (
     row: Application,
-    newStatus: string,
+    newStatus: ApplicationStatus,
     interviewDateParam?: Date | null,
     notes?: string
   ) => {
     const previousStatus = row.status;
-    setRows((prev) =>
-      prev.map((r) =>
-        r.id === row.id ? { ...r, status: newStatus, isUpdating: true } : r
+
+    // Update UI immediately
+    setRows((prevRows) =>
+      prevRows.map((r) =>
+        r.id === row.id
+          ? {
+              ...r,
+              status: newStatus,
+              applications: [
+                ...(r.applications || []),
+                {
+                  id: Date.now(),
+                  status: newStatus,
+                  createdAt: new Date().toISOString(),
+                  updatedAt: new Date().toISOString(),
+                  files: [],
+                },
+              ],
+            }
+          : r
       )
     );
 
     try {
       if (newStatus === "WAIT_RESULT" && interviewDateParam) {
-        const dateObj =
-          interviewDateParam instanceof Date
-            ? interviewDateParam
-            : new Date(interviewDateParam);
-
-        if (isNaN(dateObj.getTime())) throw new Error("Invalid interview date");
-
         await api.put(`/admin/applications/${row.id}/approve`, {
-          interviewDate: dateObj.toISOString(),
+          interviewDate: interviewDateParam.toISOString(),
           notes: notes || "Interview scheduled",
         });
       } else if (newStatus === "REJECT") {
@@ -183,30 +201,15 @@ export default function AdminDashboard() {
         });
       }
 
-      setRows((prev) =>
-        prev.map((r) =>
-          r.id === row.id
-            ? {
-                ...r,
-                status: newStatus,
-                isUpdating: false,
-                updatedAt: new Date().toISOString(),
-              }
-            : r
-        )
-      );
-
       notifications.show({
         title: "Success",
         message: `Status updated to ${getStatusLabel(newStatus)}`,
         color: "green",
       });
     } catch (err) {
-      setRows((prev) =>
-        prev.map((r) =>
-          r.id === row.id
-            ? { ...r, status: previousStatus, isUpdating: false }
-            : r
+      setRows((prevRows) =>
+        prevRows.map((r) =>
+          r.id === row.id ? { ...r, status: previousStatus } : r
         )
       );
       const msg =
@@ -215,24 +218,29 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleStatusChange = (row: Application, newStatus: string) => {
-    if (newStatus === "SCHEDULE_INTERVIEW") {
+  const handleStatusChange = (
+    row: Application,
+    action: "SCHEDULE" | ApplicationStatus
+  ) => {
+    if (action === "SCHEDULE") {
       setSelectedApplication(row);
       setOpened(true);
     } else {
-      handleStatusUpdate(row, newStatus);
+      handleStatusUpdate(row, action);
     }
   };
 
+  // Filter rows by tab
   const filteredRows = rows.filter((r) => {
+    const latestStatus = getLatestApplicationStatus(r);
     switch (tab) {
-      case "AWAIT_INTERVIEW":
-        return r.status === "PENDING";
-      case "AWAIT_RESULT":
-        return r.status === "WAIT_RESULT";
+      case "PENDING":
+        return latestStatus === "PENDING" || latestStatus === "SCHEDULED";
+      case "WAIT_RESULT":
+        return latestStatus === "WAIT_RESULT";
       case "OUTCOME":
         return ["PASS_INTERVIEW", "REJECT_INTERVIEW", "REJECT"].includes(
-          r.status
+          latestStatus
         );
       default:
         return true;
@@ -264,10 +272,12 @@ export default function AdminDashboard() {
 
         <SegmentedControl
           value={tab}
-          onChange={setTab}
+          onChange={(value) =>
+            setTab(value as "PENDING" | "WAIT_RESULT" | "OUTCOME")
+          }
           data={[
-            { label: "Awaiting Interview", value: "AWAIT_INTERVIEW" },
-            { label: "Awaiting Result", value: "AWAIT_RESULT" },
+            { label: "Awaiting Interview", value: "PENDING" },
+            { label: "Awaiting Result", value: "WAIT_RESULT" },
             { label: "Outcome", value: "OUTCOME" },
           ]}
           fullWidth
@@ -300,107 +310,139 @@ export default function AdminDashboard() {
               </Table.Thead>
 
               <Table.Tbody>
-                {filteredRows.map((row) => (
-                  <Table.Tr key={row.id}>
-                    <Table.Td>{row.fullName}</Table.Td>
-                    <Table.Td>{row.position}</Table.Td>
-                    <Table.Td>
-                      {new Date(row.appliedAt).toLocaleDateString()}
-                    </Table.Td>
-                    <Table.Td>
-                      <Badge
-                        color={getStatusColor(row.status)}
-                        variant="filled"
-                      >
-                        {getStatusLabel(row.status)}
-                      </Badge>
-                    </Table.Td>
-                    <Table.Td>
-                      {getFilePath(row, "PHOTO") ? (
-                        <Anchor
-                          href={`${FILE_BASE}/uploads/${getFilePath(
-                            row,
-                            "PHOTO"
-                          )}`}
-                          target="_blank"
-                          rel="noreferrer"
+                {filteredRows.map((row) => {
+                  const latestStatus = getLatestApplicationStatus(row);
+                  return (
+                    <Table.Tr key={row.id}>
+                      <Table.Td>{row.fullName}</Table.Td>
+                      <Table.Td>{row.position}</Table.Td>
+                      <Table.Td>
+                        {new Date(row.appliedAt).toLocaleDateString()}
+                      </Table.Td>
+                      <Table.Td>
+                        <Badge
+                          color={getStatusColor(latestStatus)}
+                          variant="filled"
                         >
-                          View Photo
-                        </Anchor>
-                      ) : (
-                        <Text c="dimmed">No Photo</Text>
-                      )}
-                    </Table.Td>
-                    <Table.Td>
-                      {getFilePath(row, "CV") ? (
-                        <Anchor
-                          href={`${FILE_BASE}/uploads/${getFilePath(
-                            row,
-                            "CV"
-                          )}`}
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          View CV
-                        </Anchor>
-                      ) : (
-                        <Text c="dimmed">No CV</Text>
-                      )}
-                    </Table.Td>
-                    <Table.Td>
-                      <Group spacing="xs">
-                        <Menu shadow="sm" withArrow>
-                          <Menu.Target>
-                            <Button
-                              size="xs"
-                              rightIcon={<IconChevronDown size={14} />}
-                            >
-                              Change
-                            </Button>
-                          </Menu.Target>
-                          <Menu.Dropdown>
-                            {row.status !== "WAIT_RESULT" &&
-                              row.status !== "PASS_INTERVIEW" &&
-                              row.status !== "REJECT_INTERVIEW" &&
-                              row.status !== "REJECT" && (
+                          {getStatusLabel(latestStatus)}
+                        </Badge>
+                      </Table.Td>
+                      <Table.Td>
+                        {getFilePath(row, "PHOTO") ? (
+                          <Anchor
+                            href={`${FILE_BASE}/uploads/${getFilePath(
+                              row,
+                              "PHOTO"
+                            )}`}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            View Photo
+                          </Anchor>
+                        ) : (
+                          <Text c="dimmed">No Photo</Text>
+                        )}
+                      </Table.Td>
+                      <Table.Td>
+                        {getFilePath(row, "CV") ? (
+                          <Anchor
+                            href={`${FILE_BASE}/uploads/${getFilePath(
+                              row,
+                              "CV"
+                            )}`}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            View CV
+                          </Anchor>
+                        ) : (
+                          <Text c="dimmed">No CV</Text>
+                        )}
+                      </Table.Td>
+                      <Table.Td>
+                        <Group spacing="xs">
+                          <Menu shadow="sm" withArrow>
+                            <Menu.Target>
+                              <Button
+                                size="xs"
+                                rightIcon={<IconChevronDown size={14} />}
+                              >
+                                Change
+                              </Button>
+                            </Menu.Target>
+                            <Menu.Dropdown>
+                              {latestStatus === "PENDING" && (
+                                <>
+                                  <Menu.Item
+                                    color="blue"
+                                    onClick={() =>
+                                      handleStatusChange(row, "SCHEDULE")
+                                    }
+                                  >
+                                    Approve & Schedule Interview
+                                  </Menu.Item>
+                                  <Menu.Item
+                                    color="red"
+                                    onClick={() =>
+                                      handleStatusChange(row, "REJECT")
+                                    }
+                                  >
+                                    Reject
+                                  </Menu.Item>
+                                </>
+                              )}
+
+                              {latestStatus === "SCHEDULED" && (
                                 <Menu.Item
                                   color="blue"
                                   onClick={() =>
-                                    handleStatusChange(
-                                      row,
-                                      "SCHEDULE_INTERVIEW"
-                                    )
+                                    handleStatusChange(row, "WAIT_RESULT")
                                   }
                                 >
-                                  Schedule Interview
+                                  Mark as Interview Done
                                 </Menu.Item>
                               )}
 
-                            {[
-                              "PENDING",
-                              "PASS_INTERVIEW",
-                              "REJECT_INTERVIEW",
-                              "REJECT",
-                            ].map(
-                              (statusOption) =>
-                                statusOption !== row.status && (
+                              {latestStatus === "WAIT_RESULT" && (
+                                <>
                                   <Menu.Item
-                                    key={statusOption}
-                                    color={getStatusColor(statusOption)}
+                                    color="green"
                                     onClick={() =>
-                                      handleStatusChange(row, statusOption)
+                                      handleStatusChange(row, "PASS_INTERVIEW")
                                     }
                                   >
-                                    {getStatusLabel(statusOption)}
+                                    Pass Interview
                                   </Menu.Item>
-                                )
-                            )}
-                          </Menu.Dropdown>
-                        </Menu>
-                      </Group>
-                    </Table.Td>
-                  </Table.Tr>
-                ))}
+                                  <Menu.Item
+                                    color="red"
+                                    onClick={() =>
+                                      handleStatusChange(
+                                        row,
+                                        "REJECT_INTERVIEW"
+                                      )
+                                    }
+                                  >
+                                    Reject Interview
+                                  </Menu.Item>
+                                </>
+                              )}
+
+                              {[
+                                "PASS_INTERVIEW",
+                                "REJECT_INTERVIEW",
+                                "REJECT",
+                              ].includes(latestStatus) && (
+                                <Menu.Item disabled>
+                                  No actions available
+                                </Menu.Item>
+                              )}
+                            </Menu.Dropdown>
+                          </Menu>
+                        </Group>
+                      </Table.Td>
+                    </Table.Tr>
+                  );
+                })}
               </Table.Tbody>
             </Table>
           </Box>
