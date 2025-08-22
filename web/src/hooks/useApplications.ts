@@ -1,161 +1,58 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api";
+import { ApplicationResponse, ApplicationsResponse, ApplicationStatus, ApplicationWithFiles, BaseApiResponse, UpdateApplicationStatusParams } from "../@types";
 
-// Type definitions matching Prisma schema
-export type ApplicationStatus =
-  | "PENDING"
-  | "INTERVIEW_SCHEDULED"
-  | "PASSED_INTERVIEW"
-  | "REJECTED_INTERVIEW"
-  | "APPROVED"
-  | "REJECTED";
-
-export type FileType = "PHOTO" | "CV";
-
-export type File = {
-  id: number;
-  filePath: string;
-  fileType: FileType;
-  applicationId: number;
-  uploaderId?: number;
-  createdAt: string;
-};
-
-export type Application = {
-  id: number;
-  applicantId: number;
-  status: ApplicationStatus;
-  notes?: string | null;
-  createdAt: string;
-  updatedAt: string;
-  files: File[];
-  applicant: Applicant;
-};
-
-export type Applicant = {
-  id: number;
-  fullName: string;
-  email: string;
-  phone: string | null;
-  position: string;
-  dateOfBirth: string | null;
-  status: ApplicationStatus;
-  appliedAt: string;
-  updatedAt: string;
-  updatedBy: string | null;
-  createdById: number | null;
-  applications: Application[];
-  createdBy?: {
-    id: number;
-    email: string;
-    firstName: string | null;
-    lastName: string | null;
-  } | null;
-};
-
-export interface ApplicationWithFiles {
-  id: number;
-  status: ApplicationStatus;
-  notes?: string | null;
-  interviewAt?: string | null;
-  applicant: Omit<Applicant, "applications"> & {
-    fullName: string;
-    email: string;
-    phone: string | null;
-    position: string;
-    dateOfBirth: string | null;
-    status: ApplicationStatus;
-    appliedAt: string;
-    updatedAt: string;
-    updatedBy: string | null;
-    createdById: number | null;
-  };
-  files: Array<{
-    id: number;
-    filePath: string;
-    fileType: "CV" | "PHOTO" | "OTHER";
-    applicationId: number;
-    uploaderId?: number;
-    createdAt: string;
-  }>;
-  photoPath?: string;
-  cvPath?: string;
-  updatedAt: string;
-  createdAt: string;
-  applicantId: number;
-}
-
-export type UIApplication = {
-  id: number;
-  fullName: string;
-  email: string;
-  phone: string | null;
-  position: string;
-  status: ApplicationStatus;
-  appliedAt: string;
-  updatedAt: string;
-  files: File[];
-  applicationId: number;
-  notes?: string | null;
-  interviewDate?: string | null;
-};
-
-type ApiResponse<T> = BaseApiResponse<T>;
-
-interface BaseApiResponse<T> {
-  data: T;
-  message?: string;
-  success?: boolean;
-}
-
-interface ApplicationsResponse {
-  data: ApplicationWithFiles[];
-  message?: string;
-  success?: boolean;
-}
-
-interface ApplicationResponse {
-  data: ApplicationWithFiles;
-  message?: string;
-  success?: boolean;
-}
-
-interface UpdateApplicationData {
-  id: string;
-  status?: ApplicationStatus;
-  notes?: string | null;
-  interviewAt?: string | null;
-}
-
-export const useApplications = (status?: ApplicationStatus) => {
+export const useApplications = (status?: ApplicationStatus => {
   return useQuery<ApplicationWithFiles[]>({
     queryKey: status ? ["applications", status] : ["applications"],
     queryFn: async () => {
       const response = await api.get<ApplicationsResponse>(
         "/admin/applications",
-        { params: status ? { status } : {} }
+        {
+          params: status,
+        }
       );
 
-      if (!response.data) {
+      if (!response.data || !response.data.success) {
         throw new Error("Invalid response format from server");
       }
 
-      return response.data.map((app) => ({
-        ...app,
-        id: app.id,
-        status: app.status,
-        notes: app.notes,
-        interviewAt: app.interviewAt,
-        applicant: app.applicant,
-        files: app.files,
-        photoPath: app.photoPath,
-        cvPath: app.cvPath,
-        updatedAt: app.updatedAt,
-        createdAt: app.createdAt,
-      }));
+      return response.data.data.map((applicant: any) => {
+        const latestApp = applicant.applications[0];
+        const photoFile = latestApp?.files.find(
+          (f: any) => f.fileType === "PHOTO"
+        );
+        const cvFile = latestApp?.files.find((f: any) => f.fileType === "CV");
+
+        return {
+          id: latestApp.id,
+          status: latestApp.status,
+          notes: latestApp.notes,
+          applicant: {
+            id: applicant.id,
+            fullName: applicant.fullName,
+            email: applicant.email,
+            phone: applicant.phone,
+            position: applicant.position,
+            dateOfBirth: applicant.dateOfBirth,
+            status: applicant.status,
+            appliedAt: applicant.appliedAt,
+            updatedAt: applicant.updatedAt,
+            updatedBy: applicant.updatedBy,
+            createdById: applicant.createdById,
+            createdBy: applicant.createdBy,
+          },
+          files: latestApp.files,
+          photoPath: photoFile?.filePath,
+          cvPath: cvFile?.filePath,
+          updatedAt: latestApp.updatedAt,
+          createdAt: latestApp.createdAt,
+          applicantId: applicant.id,
+        } as ApplicationWithFiles;
+      });
     },
     keepPreviousData: true,
-  } as any); // Type assertion to handle keepPreviousData type issue
+  });
 };
 
 export const useApplication = (id: string) => {
@@ -165,12 +62,42 @@ export const useApplication = (id: string) => {
       const response = await api.get<ApplicationResponse>(
         `/admin/applications/${id}`
       );
-
-      if (!response.data) {
+      if (!response.data || !response.data.success) {
         throw new Error("Invalid response format from server");
       }
 
-      return response.data;
+      const applicant = response.data.data;
+      const latestApp = applicant.applications[0];
+      const photoFile = latestApp?.files.find(
+        (f: any) => f.fileType === "PHOTO"
+      );
+      const cvFile = latestApp?.files.find((f: any) => f.fileType === "CV");
+
+      return {
+        id: latestApp.id,
+        status: latestApp.status,
+        notes: latestApp.notes,
+        applicant: {
+          id: applicant.id,
+          fullName: applicant.fullName,
+          email: applicant.email,
+          phone: applicant.phone,
+          position: applicant.position,
+          dateOfBirth: applicant.dateOfBirth,
+          status: applicant.status,
+          appliedAt: applicant.appliedAt,
+          updatedAt: applicant.updatedAt,
+          updatedBy: applicant.updatedBy,
+          createdById: applicant.createdById,
+          createdBy: applicant.createdBy,
+        },
+        files: latestApp.files,
+        photoPath: photoFile?.filePath,
+        cvPath: cvFile?.filePath,
+        updatedAt: latestApp.updatedAt,
+        createdAt: latestApp.createdAt,
+        applicantId: applicant.id,
+      } as ApplicationWithFiles;
     },
     enabled: !!id,
   });
@@ -178,22 +105,10 @@ export const useApplication = (id: string) => {
 
 export const useCreateApplication = () => {
   const queryClient = useQueryClient();
-
-  return useMutation<
-    {
-      data: {
-        success: boolean;
-        data: { applicant: Applicant; application: Application };
-      };
-    },
-    Error,
-    FormData
-  >({
+  return useMutation<BaseApiResponse<any>, Error, FormData>({
     mutationFn: (data: FormData) =>
       api.post("/applications/submit", data, {
-        headers: {
-          "Content-Type": "multipart/form-data",
-        },
+        headers: { "Content-Type": "multipart/form-data" },
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["applications"] });
@@ -201,28 +116,8 @@ export const useCreateApplication = () => {
   });
 };
 
-export const useUpdateApplication = () => {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: ({ id, ...data }: UpdateApplicationData) =>
-      api.put(`/admin/applications/${id}`, data),
-    onSuccess: (_, { id }) => {
-      queryClient.invalidateQueries({ queryKey: ["applications"] });
-      queryClient.invalidateQueries({ queryKey: ["application", id] });
-    },
-  });
-};
-
-interface UpdateApplicationStatusParams {
-  id: string;
-  status: ApplicationStatus;
-  notes?: string;
-}
-
 export const useUpdateApplicationStatus = () => {
   const queryClient = useQueryClient();
-
   return useMutation<
     ApplicationWithFiles,
     Error,
@@ -231,26 +126,14 @@ export const useUpdateApplicationStatus = () => {
     mutationFn: async ({ id, status, notes }) => {
       const response = await api.put<ApplicationResponse>(
         `/admin/applications/${id}/status`,
-        { status, notes }
+        { status: status, notes }
       );
-      if (!response.data) {
+      if (!response.data || !response.data.success) {
         throw new Error("Invalid response format from server");
       }
-      return response.data;
+      return response.data.data;
     },
-    onSuccess: (data, { id }) => {
-      queryClient.invalidateQueries({ queryKey: ["applications"] });
-      queryClient.invalidateQueries({ queryKey: ["application", id] });
-    },
-  });
-};
-
-export const useDeleteApplication = () => {
-  const queryClient = useQueryClient();
-
-  return useMutation<void, Error, string>({
-    mutationFn: (id) => api.delete(`/admin/applications/${id}`),
-    onSuccess: (id) => {
+    onSuccess: (_, { id }) => {
       queryClient.invalidateQueries({ queryKey: ["applications"] });
       queryClient.invalidateQueries({ queryKey: ["application", id] });
     },
@@ -259,16 +142,15 @@ export const useDeleteApplication = () => {
 
 export const useApproveApplication = () => {
   const queryClient = useQueryClient();
-
   return useMutation<
     ApplicationWithFiles,
     Error,
-    { id: string } & ApproveApplicationData
+    { id: string; interviewDate: string; notes?: string }
   >({
     mutationFn: ({ id, ...data }) =>
       api
         .put(`/admin/applications/${id}/approve`, data)
-        .then((res) => res.data),
+        .then((res) => res.data.data),
     onSuccess: (_, { id }) => {
       queryClient.invalidateQueries({ queryKey: ["applications"] });
       queryClient.invalidateQueries({ queryKey: ["application", id] });
@@ -278,14 +160,15 @@ export const useApproveApplication = () => {
 
 export const useRejectApplication = () => {
   const queryClient = useQueryClient();
-
   return useMutation<
     ApplicationWithFiles,
     Error,
-    { id: string } & RejectApplicationData
+    { id: string; notes?: string }
   >({
     mutationFn: ({ id, ...data }) =>
-      api.put(`/admin/applications/${id}/reject`, data).then((res) => res.data),
+      api
+        .put(`/admin/applications/${id}/reject`, data)
+        .then((res) => res.data.data),
     onSuccess: (_, { id }) => {
       queryClient.invalidateQueries({ queryKey: ["applications"] });
       queryClient.invalidateQueries({ queryKey: ["application", id] });
@@ -295,38 +178,33 @@ export const useRejectApplication = () => {
 
 export const useRecordInterviewResult = () => {
   const queryClient = useQueryClient();
-
   return useMutation<
     ApplicationWithFiles,
     Error,
-    { id: string; result: string; notes?: string }
+    {
+      id: string;
+      result: "PASS_INTERVIEW" | "REJECT_INTERVIEW";
+      notes?: string;
+    }
   >({
-    mutationFn: async ({ id, result, notes }) => {
-      const response = await api.post<ApplicationResponse>(
-        `/admin/applications/${id}/interview`,
-        { result, notes }
-      );
-      if (!response.data) {
-        throw new Error("Invalid response format from server");
-      }
-      return response.data;
-    },
-    onSuccess: (data, { id }) => {
+    mutationFn: ({ id, ...data }) =>
+      api
+        .put(`/admin/applications/${id}/interview-result`, data)
+        .then((res) => res.data.data),
+    onSuccess: (_, { id }) => {
       queryClient.invalidateQueries({ queryKey: ["applications"] });
       queryClient.invalidateQueries({ queryKey: ["application", id] });
     },
   });
 };
 
-// Export types for use in components
-export type {
-  ApplicationStatus,
-  File as ApplicationFile,
-  Application as ApplicationType,
-  ApplicationWithFiles,
-  ApproveApplicationData,
-  RejectApplicationData,
-  RecordInterviewResultData,
-  UpdateApplicationStatusData,
-  UpdateApplicationData,
+export const useDeleteApplication = () => {
+  const queryClient = useQueryClient();
+  return useMutation<void, Error, string>({
+    mutationFn: (id) => api.delete(`/admin/applications/${id}`),
+    onSuccess: (_, id) => {
+      queryClient.invalidateQueries({ queryKey: ["applications"] });
+      queryClient.invalidateQueries({ queryKey: ["application", id] });
+    },
+  });
 };

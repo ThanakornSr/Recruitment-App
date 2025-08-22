@@ -9,23 +9,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth as useAuthHook } from "../hooks/useAuth";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader, Center } from "@mantine/core";
-
-export interface User {
-  id: string;
-  email: string;
-  role: string;
-  fullName?: string;
-  createdAt?: string;
-  updatedAt?: string;
-}
-
-interface AuthContextType {
-  user: User | null;
-  loading: boolean;
-  login: (email: string, password: string) => void;
-  logout: () => void;
-  isAdmin: boolean;
-}
+import { AuthContextType } from "../@types";
 
 export const AuthContext = createContext<AuthContextType | null>(null);
 

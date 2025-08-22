@@ -22,29 +22,7 @@ import { useCallback, useContext, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { AuthContext } from "../contexts/AuthContext";
-
-interface File {
-  id: number;
-  filePath: string;
-  fileType: "PHOTO" | "CV";
-  createdAt: string;
-}
-
-interface Application {
-  id: number;
-  fullName: string;
-  email: string;
-  position: string;
-  status: string;
-  phone?: string;
-  appliedAt: string;
-  updatedAt: string;
-  isUpdating?: boolean;
-  applications: Array<{
-    id: number;
-    files: File[];
-  }>;
-}
+import { Application } from "../@types";
 
 const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:4000/api";
 const FILE_BASE = API_BASE.replace(/\/api$/, "");

@@ -1,33 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, setToken, getToken } from "../api";
-
-interface LoginResponse {
-  user: User;
-  token: string;
-}
-
-export interface User {
-  id: string;
-  email: string;
-  role: string;
-  fullName?: string;
-  createdAt?: string;
-  updatedAt?: string;
-}
-
-interface ApiResponse<T> {
-  success: boolean;
-  data: T;
-}
-
-interface UserData {
-  id: string;
-  email: string;
-  role: string;
-  fullName?: string;
-  createdAt?: string;
-  updatedAt?: string;
-}
+import { LoginResponse, User } from "../@types";
 
 export const useAuth = () => {
   const queryClient = useQueryClient();
