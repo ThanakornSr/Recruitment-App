@@ -1,13 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, setToken, getToken } from "../api";
-import { User } from "../contexts/AuthContext";
 
 interface LoginResponse {
   user: User;
   token: string;
 }
 
-interface UserResponse {
+export interface User {
   id: string;
   email: string;
   role: string;
@@ -16,9 +15,18 @@ interface UserResponse {
   updatedAt?: string;
 }
 
-interface MeResponse {
+interface ApiResponse<T> {
   success: boolean;
-  data: UserResponse;
+  data: T;
+}
+
+interface UserData {
+  id: string;
+  email: string;
+  role: string;
+  fullName?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export const useAuth = () => {
@@ -35,18 +43,23 @@ export const useAuth = () => {
       if (!token) return null;
 
       try {
-        const response = await api.get<MeResponse>("/auth/me", {
+        const response = await api.get("/auth/me", {
           headers: {
             Authorization: `Bearer ${token}`,
           },
         });
-        const userData = response.data?.data;
-        if (!userData) return null;
 
+        if (!response.data?.success || !response.data?.data) return null;
+
+        const { id, email, role, fullName, createdAt, updatedAt } =
+          response.data.data;
         return {
-          id: userData.id,
-          email: userData.email,
-          role: userData.role,
+          id,
+          email,
+          role,
+          fullName,
+          createdAt,
+          updatedAt,
         };
       } catch (error) {
         setToken(null);

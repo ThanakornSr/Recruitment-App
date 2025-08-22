@@ -1,6 +1,6 @@
 import { AppShell, Avatar, Button, Group, Menu, Text } from "@mantine/core";
 import "@mantine/dates/styles.css";
-import { IconLogout, IconSettings, IconUser } from "@tabler/icons-react";
+import { IconLogout, IconUser } from "@tabler/icons-react";
 import { Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "./contexts/AuthContext";
 
@@ -61,12 +61,6 @@ export default function App() {
                     onClick={() => navigate("/admin/profile")}
                   >
                     Profile
-                  </Menu.Item>
-                  <Menu.Item
-                    leftSection={<IconSettings size={14} />}
-                    onClick={() => navigate("/admin/settings")}
-                  >
-                    Settings
                   </Menu.Item>
 
                   <Menu.Divider />

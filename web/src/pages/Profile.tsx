@@ -11,12 +11,16 @@ import {
   Avatar,
   Stack,
   Divider,
+  Badge,
 } from "@mantine/core";
 import {
   IconLogout,
   IconUser,
   IconMail,
   IconShield,
+  IconCalendar,
+  IconClock,
+  IconId
 } from "@tabler/icons-react";
 import { useAuth } from "../contexts/AuthContext";
 
@@ -54,16 +58,28 @@ export default function ProfilePage() {
 
       <Paper withBorder p="xl" radius="md" shadow="sm">
         <Group mb="xl" align="flex-start">
-          <Avatar size={80} radius={40} color="blue">
-            <IconUser size={40} />
+          <Avatar size={100} radius={50} color="blue">
+            <IconUser size={50} />
           </Avatar>
           <div>
-            <Title order={3}>{user.email}</Title>
-            <Text c="dimmed">{user.role}</Text>
+            <Title order={2} mb="xs">
+              {user.fullName || 'No Name Provided'}
+            </Title>
+            <Text c="dimmed" size="lg">{user.email}</Text>
+            <Badge color="blue" variant="light" size="lg" mt={4}>
+              {user.role}
+            </Badge>
           </div>
         </Group>
 
-        <Stack gap="md">
+        <Stack gap="lg">
+          {user.fullName && (
+            <Group>
+              <IconUser size={20} />
+              <Text>{user.fullName}</Text>
+            </Group>
+          )}
+
           <Group>
             <IconMail size={20} />
             <Text>{user.email}</Text>
@@ -71,10 +87,37 @@ export default function ProfilePage() {
 
           <Group>
             <IconShield size={20} />
-            <Text style={{ textTransform: "capitalize" }}>
+            <Text style={{ textTransform: 'capitalize' }}>
               {user.role.toLowerCase()}
             </Text>
           </Group>
+
+          {user.id && (
+            <Group>
+              <IconId size={20} />
+              <Text size="sm" c="dimmed">
+                ID: {user.id}
+              </Text>
+            </Group>
+          )}
+
+          {user.createdAt && (
+            <Group>
+              <IconCalendar size={20} />
+              <Text>
+                Member since: {new Date(user.createdAt).toLocaleDateString()}
+              </Text>
+            </Group>
+          )}
+
+          {user.updatedAt && (
+            <Group>
+              <IconClock size={20} />
+              <Text>
+                Last updated: {new Date(user.updatedAt).toLocaleString()}
+              </Text>
+            </Group>
+          )}
 
           <Divider my="md" />
 

@@ -12,6 +12,7 @@ import Login from "./pages/Login";
 import PublicApply from "./pages/PublicApply";
 import AdminDashboard from "./pages/AdminDashboard";
 import ApplicationDetail from "./pages/ApplicationDetail";
+import Profile from "./pages/Profile";
 import "@mantine/core/styles.css";
 import "@mantine/notifications/styles.css";
 
@@ -36,6 +37,7 @@ const router = createBrowserRouter([
         children: [
           { index: true, element: <AdminDashboard /> },
           { path: "applications/:id", element: <ApplicationDetail /> },
+          { path: "profile", element: <Profile /> },
         ],
       },
     ],

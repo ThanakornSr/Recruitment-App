@@ -41,8 +41,8 @@ interface Application {
     files: File[];
   }>;
 }
-const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:3000/api';
-const FILE_BASE = API_BASE ? API_BASE.replace(/\/api$/, '') : 'http://localhost:3000';
+const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000/api';
+const FILE_BASE = API_BASE ? API_BASE.replace(/\/api$/, '') : 'http://localhost:4000';
 
 export default function AdminDashboard() {
   const { user, isAdmin, loading: authLoading } = useContext(AuthContext);
