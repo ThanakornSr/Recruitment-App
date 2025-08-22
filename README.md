@@ -98,6 +98,13 @@ ALLOWED_ORIGINS=http://localhost:5173
 VITE_API_BASE=http://localhost:4000
 ```
 
+#### Admin User
+```
+ADMIN_EMAIL=admin@demo.com
+ADMIN_PASSWORD=admin123
+```
+
+
 ## 📚 API Documentation
 
 ### Authentication
@@ -106,20 +113,16 @@ VITE_API_BASE=http://localhost:4000
 - `GET /auth/me` - Get current user session
 
 ### Applications
-- `GET /api/applications` - List all applications (admin)
-- `POST /api/applications` - Submit new application (public)
-- `GET /api/applications/:id` - Get application details
-- `PUT /api/applications/:id/status` - Update application status
-- `DELETE /api/applications/:id` - Delete application (admin)
+- `POST /applications/submit` - Submit new application (public)
+- `GET /applications` - List all applications (admin)
+- `GET /applications/:id` - Get application details (admin)
+- `PUT /applications/:id/approve` - Approve application and schedule interview (admin)
+- `PUT /applications/:id/reject` - Reject application (admin)
+- `PUT /applications/:id/interview-result` - Record interview result (admin)
+- `DELETE /applications/:id` - Delete application (admin)
 
 ### Files
-- `POST /api/upload` - Upload files (supports multiple)
-- `GET /api/files/:filename` - Download file
-
-### Admin
-- `GET /admin/users` - List all users (admin)
-- `POST /admin/users` - Create new user (admin)
-- `PUT /admin/users/:id` - Update user (admin)
+- `POST /api/upload` - Upload files
 
 ## 🛠 Development
 
@@ -145,31 +148,6 @@ VITE_API_BASE=http://localhost:4000
      npx prisma db push
      ```
 
-### Project Structure
-
-```
-.
-├── server/                 # Backend server
-│   ├── src/                # Source code
-│   │   ├── controllers/    # Request handlers
-│   │   ├── middleware/     # Express middleware
-│   │   ├── routes/         # API routes
-│   │   ├── services/       # Business logic
-│   │   ├── types/          # TypeScript types
-│   │   └── utils/          # Utility functions
-│   ├── prisma/             # Database schema and migrations
-│   └── uploads/            # Uploaded files
-│
-└── web/                    # Frontend application
-    ├── public/             # Static assets
-    └── src/
-        ├── components/     # Reusable UI components
-        ├── pages/          # Page components
-        ├── services/       # API services
-        ├── store/          # State management
-        └── styles/         # Global styles
-```
-
 ## 📝 Notes
 
 - **File Storage**: Uploaded files are stored in `server/uploads/`
@@ -180,15 +158,3 @@ VITE_API_BASE=http://localhost:4000
   - File upload validation
   - Input sanitization
   - CORS protection
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add some amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.

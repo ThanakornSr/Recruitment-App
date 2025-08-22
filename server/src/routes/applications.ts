@@ -1,13 +1,22 @@
-import express, { Router, Request, Response, NextFunction } from "express";
 import { PrismaClient } from "@prisma/client";
+import axios from "axios";
+import { Request, Response, Router } from "express";
 import { body, param, validationResult } from "express-validator";
+import FormData from "form-data";
+import multer from "multer";
 import { requireAuth } from "../middleware/auth";
-import multer, { FileFilterCallback, Multer } from "multer";
-import * as fs from "fs";
-import path from "path";
 
 type ExpressRequest = Request;
 type ExpressResponse = Response;
+
+interface UploadedFilesResponse {
+  success: boolean;
+  message: string;
+  files: {
+    photo?: string;
+    cv: string;
+  };
+}
 
 interface ApplicationFiles {
   photo?: Express.Multer.File[];
@@ -17,6 +26,7 @@ interface ApplicationFiles {
 function isApplicationFiles(files: any): files is ApplicationFiles {
   return files && Array.isArray(files.cv) && files.cv.length > 0;
 }
+
 type RequestWithFiles = ExpressRequest & {
   files?: {
     [fieldname: string]: Express.Multer.File[];
@@ -24,59 +34,61 @@ type RequestWithFiles = ExpressRequest & {
 };
 
 const prisma = new PrismaClient();
+const UPLOAD_API_URL =
+  process.env.UPLOAD_API_URL || "http://localhost:4000/api/upload";
 
-const storage = multer.diskStorage({
-  destination: (
-    req: ExpressRequest,
-    file: Express.Multer.File,
-    cb: (error: Error | null, destination: string) => void
-  ) => {
-    const uploadDir = path.join(__dirname, "../../uploads");
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir, { recursive: true });
-    }
-    cb(null, uploadDir);
-  },
-  filename: (
-    req: ExpressRequest,
-    file: Express.Multer.File,
-    cb: (error: Error | null, filename: string) => void
-  ) => {
-    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
-    cb(
-      null,
-      file.fieldname + "-" + uniqueSuffix + path.extname(file.originalname)
-    );
-  },
-});
+const memoryStorage = multer.memoryStorage();
+const upload = multer({ storage: memoryStorage });
 
-const fileFilter = (
-  req: ExpressRequest,
-  file: Express.Multer.File,
-  cb: FileFilterCallback
-) => {
-  const allowedTypes = [".pdf", ".doc", ".docx", ".jpg", ".jpeg", ".png"];
-  const ext = path.extname(file.originalname).toLowerCase();
-  if (allowedTypes.includes(ext)) {
-    cb(null, true);
-  } else {
-    cb(
-      new Error(
-        "Only .pdf, .doc, .docx, .jpg, .jpeg, and .png files are allowed"
-      )
-    );
+async function uploadFiles(files: {
+  photo?: Express.Multer.File[];
+  cv: Express.Multer.File[];
+}): Promise<{ cvPath: string; photoPath?: string }> {
+  const formData = new FormData();
+
+  if (files.cv?.[0]) {
+    const cvFile = files.cv[0];
+    formData.append("cv", cvFile.buffer, {
+      filename: cvFile.originalname,
+      contentType: cvFile.mimetype,
+    });
   }
-};
 
-// Upload Multer
-const upload = multer({
-  storage,
-  fileFilter,
-  limits: {
-    fileSize: 10 * 1024 * 1024,
-    files: 2,
-  },
-});
+  if (files.photo?.[0]) {
+    const photoFile = files.photo[0];
+    formData.append("photo", photoFile.buffer, {
+      filename: photoFile.originalname,
+      contentType: photoFile.mimetype,
+    });
+  }
+
+  try {
+    const response = await axios.post<UploadedFilesResponse>(
+      UPLOAD_API_URL,
+      formData,
+      {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+      }
+    );
+
+    if (response.data.success) {
+      return {
+        cvPath: `/uploads/${response.data.files.cv}`,
+        photoPath: response.data.files.photo
+          ? `/uploads/${response.data.files.photo}`
+          : undefined,
+      };
+    } else {
+      throw new Error("File upload failed");
+    }
+  } catch (error) {
+    console.error("Error uploading files:", error);
+    throw new Error("Failed to upload files");
+  }
+}
+
 const submitApplicationHandler = async (
   req: RequestWithFiles,
   res: ExpressResponse
@@ -93,6 +105,7 @@ const submitApplicationHandler = async (
     return res.status(400).json({ message: "CV is required" });
   }
 
+  const prisma = new PrismaClient();
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -100,70 +113,140 @@ const submitApplicationHandler = async (
     }
 
     const { fullName, phone, dob, email, position } = req.body;
-    const cvFile = cv[0];
-    const photoFile = photo?.[0];
 
-    const cvFilename = path.basename(cvFile.path);
-    const cvPublicPath = `/uploads/${cvFilename}`;
+    const filesToUpload: { field: string; file: Express.Multer.File }[] = [
+      { field: "cv", file: cv[0] },
+    ];
 
-    let photoPublicPath: string | null = null;
-    if (photoFile) {
-      const photoFilename = path.basename(photoFile.path);
-      photoPublicPath = `/uploads/${photoFilename}`;
+    if (photo?.[0]) {
+      filesToUpload.push({ field: "photo", file: photo[0] });
     }
 
-    const applicant = await prisma.applicant.create({
-      data: {
-        fullName,
-        phone,
-        email,
-        position,
-        photoPath: photoPublicPath,
-        cvPath: cvPublicPath,
-        notes: `Date of Birth: ${dob}`,
-        status: "PENDING",
-        appliedAt: new Date(),
-      },
+    const { application, applicant } = await prisma.$transaction(async (tx) => {
+      const applicant = await tx.applicant.create({
+        data: {
+          fullName,
+          phone,
+          email,
+          position,
+          dateOfBirth: dob ? new Date(dob) : null,
+          status: "PENDING",
+          appliedAt: new Date(),
+        },
+      });
+
+      const application = await tx.application.create({
+        data: {
+          applicant: {
+            connect: { id: applicant.id },
+          },
+          status: "PENDING",
+        },
+      });
+
+      return { application, applicant };
     });
 
-    // Create application record
-    await prisma.application.create({
-      data: {
-        applicantId: applicant.id,
-        status: "PENDING",
-      },
-    });
+    const uploadedFiles: Record<string, any> = {};
+    for (const { field, file } of filesToUpload) {
+      try {
+        console.log(`Preparing to upload ${field} file`);
+        const fileFormData = new FormData();
+        fileFormData.append(field, file.buffer, {
+          filename: file.originalname,
+          contentType: file.mimetype,
+        });
 
-    return res.status(201).json({
+        console.log(`Sending ${field} to upload API`);
+        const uploadResponse = await axios.post<{
+          success: boolean;
+          files: Record<
+            string,
+            { id: number; filePath: string; fileType: string }
+          >;
+          message?: string;
+          error?: any;
+        }>(UPLOAD_API_URL, fileFormData, {
+          headers: {
+            ...fileFormData.getHeaders(),
+          },
+          params: {
+            applicationId: application.id,
+          },
+        });
+
+        console.log(`Upload response for ${field}:`, {
+          status: uploadResponse.status,
+          data: uploadResponse.data,
+        });
+
+        if (!uploadResponse.data.success) {
+          console.error(`Upload failed for ${field}:`, uploadResponse.data);
+          throw new Error(
+            uploadResponse.data.message || `Failed to upload ${field}`
+          );
+        }
+
+        // Store the uploaded file info
+        if (field === "cv") {
+          uploadedFiles.cv = uploadResponse.data.files?.cv;
+        } else if (field === "photo" && uploadResponse.data.files?.photo) {
+          uploadedFiles.photo = uploadResponse.data.files.photo;
+        }
+      } catch (error: any) {
+        console.error(`Error uploading ${field}:`, {
+          error: error instanceof Error ? error.message : "Unknown error",
+          stack: error instanceof Error ? error.stack : undefined,
+          response: error.response?.data,
+        });
+      }
+    }
+
+    res.status(201).json({
       success: true,
       data: {
-        id: applicant.id,
-        fullName: applicant.fullName,
-        email: applicant.email,
-        position: applicant.position,
-        status: applicant.status,
-        appliedAt: applicant.appliedAt,
+        applicant,
+        application,
+        files: uploadedFiles,
       },
     });
-  } catch (error) {
-    console.error("Error submitting application:", error);
+  } catch (error: any) {
+    const errorInfo = {
+      error: error instanceof Error ? error.message : "Unknown error",
+      stack: error instanceof Error ? error.stack : undefined,
+      response: error?.response?.data,
+      request: {
+        method: error?.request?.method,
+        url: error?.request?.path,
+        headers: error?.config?.headers,
+        data: error?.config?.data?.toString(),
+      },
+    };
+
+    console.error("Error submitting application:", errorInfo);
+
     return res.status(500).json({
       success: false,
       message: "Internal server error",
-      error: error instanceof Error ? error.message : "Unknown error",
+      error:
+        process.env.NODE_ENV === "development"
+          ? error instanceof Error
+            ? error.message
+            : String(error)
+          : "An error occurred while processing your application",
     });
+  } finally {
+    await prisma.$disconnect();
   }
 };
 
 const publicRouter = Router();
 
-// Configure multer for file uploads
 const uploadFields = upload.fields([
   { name: "photo", maxCount: 1 },
   { name: "cv", maxCount: 1 },
 ]);
 
-// Apply the middleware and handler in a single route
 publicRouter.post(
   "/submit",
   (req, res, next) => {
@@ -203,7 +286,6 @@ publicRouter.post(
   }
 );
 
-// Admin routes protected by requireAuth middleware
 const adminRouter = Router();
 adminRouter.get(
   "/applications",
@@ -220,24 +302,57 @@ adminRouter.get(
       const applications = await prisma.applicant.findMany({
         where: whereClause,
         orderBy: { appliedAt: "desc" },
-        select: {
-          id: true,
-          fullName: true,
-          email: true,
-          position: true,
-          status: true,
-          appliedAt: true,
-          updatedAt: true,
-          photoPath: true,
-          cvPath: true,
-          phone: true,
+        include: {
+          applications: {
+            select: {
+              id: true,
+              status: true,
+              createdAt: true,
+              updatedAt: true,
+              files: {
+                select: {
+                  id: true,
+                  filePath: true,
+                  fileType: true,
+                  createdAt: true,
+                },
+              },
+            },
+            orderBy: {
+              createdAt: "desc",
+            },
+          },
+          createdBy: {
+            select: {
+              id: true,
+              email: true,
+              firstName: true,
+              lastName: true,
+            },
+          },
           _count: {
             select: { applications: true },
           },
         },
       });
 
-      res.json(applications);
+      const applicationsWithFiles = applications.map((applicant) => {
+        const latestApplication = applicant.applications[0];
+        const photoFile = latestApplication?.files.find(
+          (f) => f.fileType === "PHOTO"
+        );
+        const cvFile = latestApplication?.files.find(
+          (f) => f.fileType === "CV"
+        );
+
+        return {
+          ...applicant,
+          photoPath: photoFile?.filePath,
+          cvPath: cvFile?.filePath,
+        };
+      });
+
+      res.json(applicationsWithFiles);
     } catch (error) {
       console.error("Error fetching applications:", error);
       res.status(500).json({ message: "Error fetching applications" });
@@ -280,6 +395,147 @@ adminRouter.get(
 );
 
 // Update application status
+
+// Approve an application
+adminRouter.put(
+  "/applications/:id/approve",
+  requireAuth,
+  [
+    param("id").isInt().withMessage("Invalid application ID"),
+    body("interviewDate")
+      .isISO8601()
+      .withMessage("Interview date is required and must be a valid date"),
+    body("notes").optional().isString().withMessage("Notes must be a string"),
+  ],
+  async (req: Request, res: Response) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    try {
+      const { id } = req.params;
+      const { interviewDate, notes } = req.body;
+      const userId = (req as any).user.id;
+
+      const application = await prisma.application.update({
+        where: { id: parseInt(id) },
+        data: {
+          status: "WAIT_RESULT",
+          notes,
+          updatedAt: new Date(),
+        },
+        include: { applicant: true },
+      });
+
+      res.json({
+        success: true,
+        message: "Application approved successfully. Interview scheduled.",
+        data: application,
+      });
+    } catch (error) {
+      console.error("Error approving application:", error);
+      res
+        .status(500)
+        .json({ success: false, message: "Failed to approve application" });
+    }
+  }
+);
+
+// Reject an application
+adminRouter.put(
+  "/applications/:id/reject",
+  requireAuth,
+  [
+    param("id").isInt().withMessage("Invalid application ID"),
+    body("notes").optional().isString().withMessage("Notes must be a string"),
+  ],
+  async (req: Request, res: Response) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    try {
+      const { id } = req.params;
+      const { notes } = req.body;
+      const userId = (req as any).user.id;
+
+      const application = await prisma.application.update({
+        where: { id: parseInt(id) },
+        data: {
+          status: "REJECT",
+          notes,
+          updatedAt: new Date(),
+        },
+        include: { applicant: true },
+      });
+
+      res.json({
+        success: true,
+        message: "Application rejected successfully",
+        data: application,
+      });
+    } catch (error) {
+      console.error("Error rejecting application:", error);
+      res
+        .status(500)
+        .json({ success: false, message: "Failed to reject application" });
+    }
+  }
+);
+
+// Record interview result
+adminRouter.put(
+  "/applications/:id/interview-result",
+  requireAuth,
+  [
+    param("id").isInt().withMessage("Invalid application ID"),
+    body("result")
+      .isIn(["PASS_INTERVIEW", "REJECT_INTERVIEW"])
+      .withMessage(
+        "Result must be either 'PASS_INTERVIEW' or 'REJECT_INTERVIEW'"
+      ),
+    body("feedback")
+      .optional()
+      .isString()
+      .withMessage("Feedback must be a string"),
+  ],
+  async (req: Request, res: Response) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    try {
+      const { id } = req.params;
+      const { result, feedback } = req.body;
+      const userId = (req as any).user.id;
+
+      const application = await prisma.application.update({
+        where: { id: parseInt(id) },
+        data: {
+          status: result,
+          notes: feedback,
+          updatedAt: new Date(),
+        },
+        include: { applicant: true },
+      });
+
+      res.json({
+        success: true,
+        message: `Interview result recorded successfully (${result})`,
+        data: application,
+      });
+    } catch (error) {
+      console.error("Error recording interview result:", error);
+      res
+        .status(500)
+        .json({ success: false, message: "Failed to record interview result" });
+    }
+  }
+);
+
 adminRouter.put(
   "/applications/:id/status",
   requireAuth,
@@ -291,11 +547,11 @@ adminRouter.put(
         "PENDING",
         "WAIT_RESULT",
         "PASS_INTERVIEW",
-        "REJECTED_INTERVIEW",
-        "REJECTED",
+        "REJECT_INTERVIEW",
+        "REJECT",
       ])
       .withMessage("Invalid status"),
-    body("notes").optional().isString(),
+    body("dateOfBirth").optional().isString(),
   ],
   async (req: ExpressRequest, res: ExpressResponse) => {
     try {
@@ -330,21 +586,55 @@ adminRouter.delete(
         return res.status(400).json({ errors: errors.array() });
       }
 
-      await prisma.$transaction([
-        prisma.application.deleteMany({
-          where: { applicantId: parseInt(req.params.id) },
-        }),
-        prisma.applicant.delete({
-          where: { id: parseInt(req.params.id) },
-        }),
-      ]);
+      const applicationId = parseInt(req.params.id);
 
-      res.json({ message: "Application deleted successfully" });
+      const application = await prisma.application.findUnique({
+        where: { id: applicationId },
+        include: {
+          files: true,
+          applicant: {
+            include: {
+              applications: true,
+            },
+          },
+        },
+      });
+
+      if (!application) {
+        return res.status(404).json({ message: "Application not found" });
+      }
+
+      await prisma.$transaction(async (prisma) => {
+        const { applicant } = application;
+
+        await prisma.file.deleteMany({
+          where: { applicationId: applicationId },
+        });
+
+        await prisma.application.delete({
+          where: { id: applicationId },
+        });
+        const remainingApplications = await prisma.application.count({
+          where: { applicantId: applicant.id },
+        });
+
+        if (remainingApplications === 0) {
+          await prisma.applicant.delete({
+            where: { id: applicant.id },
+          });
+        }
+      });
+
+      res.json({
+        message: "Application and related data deleted successfully",
+      });
     } catch (error) {
       console.error("Error deleting application:", error);
-      res.status(500).json({ message: "Error deleting application" });
+      res.status(500).json({
+        message: "Error deleting application: " + (error as Error).message,
+      });
     }
   }
 );
 
-export { publicRouter, adminRouter };
+export { adminRouter, publicRouter };

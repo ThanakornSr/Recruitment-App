@@ -4,19 +4,27 @@ import {
   Select,
   Button,
   Group,
+  Text,
+  Loader,
+  Image,
+  Box,
+  Center,
+  Paper,
   Title,
   Anchor,
-  Image,
-  Paper,
-  Text,
-  Box,
-  Loader,
-  Center,
 } from "@mantine/core";
-import { Link, useNavigate } from "react-router-dom";
-import { api, API_BASE } from "../api";
+import { IconDownload } from "@tabler/icons-react";
+import { useNavigate, Link } from "react-router-dom";
 import { notifications } from "@mantine/notifications";
 import { AuthContext } from "../contexts/AuthContext";
+import { api } from "../api";
+
+interface File {
+  id: number;
+  filePath: string;
+  fileType: "PHOTO" | "CV";
+  createdAt: string;
+}
 
 interface Application {
   id: number;
@@ -25,12 +33,16 @@ interface Application {
   position: string;
   status: string;
   phone?: string;
-  photoPath: string | null;
-  cvPath: string | null;
   appliedAt: string;
   updatedAt: string;
   isUpdating?: boolean;
+  applications: Array<{
+    id: number;
+    files: File[];
+  }>;
 }
+const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:3000/api';
+const FILE_BASE = API_BASE ? API_BASE.replace(/\/api$/, '') : 'http://localhost:3000';
 
 export default function AdminDashboard() {
   const { user, isAdmin, loading: authLoading } = useContext(AuthContext);
@@ -41,21 +53,24 @@ export default function AdminDashboard() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!authLoading) {
-      if (!user) {
-        navigate("/login");
-      } else if (!isAdmin) {
-        navigate("/");
-        notifications.show({
-          title: "Access Denied",
-          message: "You do not have permission to access the admin dashboard",
-          color: "red",
-        });
-      }
+    if (authLoading) return;
+
+    if (!user) {
+      navigate("/login", { replace: true });
+      return;
+    }
+
+    if (!isAdmin) {
+      navigate("/", { replace: true });
+      notifications.show({
+        title: "Access Denied",
+        message: "You do not have permission to access the admin dashboard",
+        color: "red",
+      });
     }
   }, [user, isAdmin, authLoading, navigate]);
 
-  if (authLoading || (!user && !authLoading)) {
+  if (authLoading) {
     return (
       <Center style={{ height: "100vh" }}>
         <Loader size="xl" />
@@ -167,9 +182,101 @@ export default function AdminDashboard() {
     { value: "PENDING", label: "Pending" },
     { value: "WAIT_RESULT", label: "Wait for Result" },
     { value: "PASS_INTERVIEW", label: "Passed Interview" },
-    { value: "REJECTED_INTERVIEW", label: "Rejected from Interview" },
-    { value: "REJECTED", label: "Rejected" },
+    { value: "REJECT_INTERVIEW", label: "Rejected from Interview" },
+    { value: "REJECT", label: "Rejected" },
   ];
+
+  const handleStatusUpdate = async (row: Application, newStatus: string) => {
+    if (!newStatus) return;
+
+    const previousStatus = row.status;
+
+    setRows((prevRows) =>
+      prevRows.map((r) =>
+        r.id === row.id ? { ...r, status: newStatus, isUpdating: true } : r
+      )
+    );
+
+    try {
+      let response;
+
+      if (newStatus === "WAIT_RESULT") {
+        response = await api.put(`/admin/applications/${row.id}/approve`, {
+          interviewDate: new Date(
+            Date.now() + 7 * 24 * 60 * 60 * 1000
+          ).toISOString(), // Default to 7 days from now
+          notes: `Application approved and interview scheduled`,
+        });
+      } else if (newStatus === "REJECT") {
+        // For rejecting an application
+        response = await api.put(`/admin/applications/${row.id}/reject`, {
+          notes: `Application rejected`,
+        });
+      } else if (["PASS_INTERVIEW", "REJECT_INTERVIEW"].includes(newStatus)) {
+        // For recording interview results
+        response = await api.put(
+          `/admin/applications/${row.id}/interview-result`,
+          {
+            result: newStatus,
+            feedback:
+              newStatus === "PASS_INTERVIEW"
+                ? "Candidate has passed the interview"
+                : "Candidate did not pass the interview",
+          }
+        );
+      } else {
+        // Fallback to the old status update endpoint
+        response = await api.put(`/admin/applications/${row.id}/status`, {
+          status: newStatus,
+        });
+      }
+
+      setRows((prevRows) =>
+        prevRows.map((r) =>
+          r.id === row.id
+            ? {
+                ...r,
+                status: newStatus,
+                isUpdating: false,
+                updatedAt: new Date().toISOString(),
+              }
+            : r
+        )
+      );
+
+      notifications.show({
+        title: "Success",
+        message: `Status updated to ${
+          statusOptions.find((opt) => opt.value === newStatus)?.label ||
+          newStatus
+        }`,
+        color: "green",
+      });
+    } catch (err) {
+      console.error("Failed to update status:", err);
+
+      // Revert the status in the UI if the update fails
+      setRows((prevRows) =>
+        prevRows.map((r) =>
+          r.id === row.id
+            ? {
+                ...r,
+                status: previousStatus,
+                isUpdating: false,
+              }
+            : r
+        )
+      );
+
+      const errorMessage =
+        err?.response?.data?.message || "Failed to update application status";
+      notifications.show({
+        title: "Error",
+        message: errorMessage,
+        color: "red",
+      });
+    }
+  };
 
   return (
     <div>
@@ -199,45 +306,56 @@ export default function AdminDashboard() {
           {rows.map((row) => (
             <Table.Tr key={row.id}>
               <Table.Td>
-                {row.photoPath ? (
-                  <Image
-                    src={`${API_BASE}${row.photoPath}`}
-                    width={"auto"}
-                    height={120}
-                    radius="md"
-                    fit="contain"
-                    alt={`${row.fullName}'s photo`}
-                    fallbackSrc="https://placehold.co/120x120?text=Photo+Not+Found"
-                  />
-                ) : (
-                  <Box
-                    style={{
-                      width: 120,
-                      height: 120,
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      backgroundColor: "#f5f5f5",
-                      borderRadius: "8px",
-                    }}
-                  >
-                    <Text c="dimmed" size="sm">
-                      No photo
-                    </Text>
-                  </Box>
-                )}
+                {(() => {
+                  const photoFile = row.applications[0]?.files?.find(
+                    (f) => f.fileType === "PHOTO"
+                  );
+                  if (!photoFile) {
+                    return (
+                      <Box
+                        style={{
+                          width: 120,
+                          height: 120,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          backgroundColor: "#f5f5f5",
+                          borderRadius: "8px",
+                        }}
+                      >
+                        <Text size="sm" c="dimmed">
+                          No photo
+                        </Text>
+                      </Box>
+                    );
+                  }
+
+                  return (
+                    <Image
+                      src={`${FILE_BASE}/uploads/${encodeURIComponent(
+                        photoFile.filePath
+                      )}`}
+                      width={"auto"}
+                      height={120}
+                      radius="md"
+                      fit="contain"
+                      alt={`${row.fullName}'s photo`}
+                      fallbackSrc="https://placehold.co/120x120?text=Photo+Not+Found"
+                      onError={(e) => {
+                        console.error("Error loading image:", e);
+                        console.log(
+                          "Tried to load from:",
+                          `${FILE_BASE}/uploads/${photoFile.filePath}`
+                        );
+                      }}
+                    />
+                  );
+                })()}
               </Table.Td>
               <Table.Td>
                 <Group>
                   <div>
-                    <Text fw={500}>
-                      <Anchor
-                        component={Link}
-                        to={`/admin/applications/${row.id}`}
-                      >
-                        {row.fullName}
-                      </Anchor>
-                    </Text>
+                    <Text fw={500}>{row.fullName}</Text>
                     <Text size="sm" c="dimmed">
                       {row.email}
                     </Text>
@@ -250,59 +368,9 @@ export default function AdminDashboard() {
                   <Select
                     value={row.status}
                     data={statusOptions.filter((opt) => opt.value !== "")}
-                    onChange={async (value) => {
-                      if (!value) return;
-
-                      const previousStatus = row.status;
-
-                      setRows((prevRows) =>
-                        prevRows.map((r) =>
-                          r.id === row.id
-                            ? { ...r, status: value, isUpdating: true }
-                            : r
-                        )
-                      );
-
-                      try {
-                        await api.put(`/admin/applications/${row.id}/status`, {
-                          status: value,
-                        });
-
-                        notifications.show({
-                          title: "Success",
-                          message: `Status updated to ${
-                            statusOptions.find((opt) => opt.value === value)
-                              ?.label || value
-                          }`,
-                          color: "green",
-                        });
-
-                        loadApplications();
-                      } catch (err) {
-                        console.error("Failed to update status:", err);
-
-                        setRows((prevRows) =>
-                          prevRows.map((r) =>
-                            r.id === row.id
-                              ? {
-                                  ...r,
-                                  status: previousStatus,
-                                  isUpdating: false,
-                                }
-                              : r
-                          )
-                        );
-
-                        const errorMessage =
-                          err?.response?.data?.message ||
-                          "Failed to update application status";
-                        notifications.show({
-                          title: "Error",
-                          message: errorMessage,
-                          color: "red",
-                        });
-                      }
-                    }}
+                    onChange={(value) =>
+                      value && handleStatusUpdate(row, value)
+                    }
                     variant="unstyled"
                     style={{ minWidth: "150px" }}
                     disabled={row.isUpdating}
@@ -315,13 +383,33 @@ export default function AdminDashboard() {
               </Table.Td>
               <Table.Td>
                 <Group gap="xs">
-                  <Button
+                  {/* <Button
                     component={Link}
                     to={`/admin/applications/${row.id}`}
                     size="xs"
                     variant="light"
                   >
                     View
+                  </Button> */}
+                  <Button
+                    variant="light"
+                    size="xs"
+                    component="a"
+                    href={`${FILE_BASE}/uploads/${
+                      row.applications[0]?.files?.find(
+                        (f) => f.fileType === "CV"
+                      )?.filePath || ""
+                    }`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    leftSection={<IconDownload size={14} />}
+                    disabled={
+                      !row.applications[0]?.files?.some(
+                        (f) => f.fileType === "CV"
+                      )
+                    }
+                  >
+                    Download CV
                   </Button>
                   <Button
                     size="xs"

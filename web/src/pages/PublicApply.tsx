@@ -8,6 +8,7 @@ import {
   FileInput,
   Select,
   Text,
+  Group,
   Box,
   Loader,
   Center,
@@ -29,6 +30,8 @@ const POSITIONS = [
 ];
 
 export default function PublicApply() {
+  const navigate = useNavigate();
+
   const [formData, setFormData] = useState({
     fullName: "",
     email: "",
@@ -38,7 +41,6 @@ export default function PublicApply() {
   });
   const [photo, setPhoto] = useState<File | null>(null);
   const [cv, setCv] = useState<File | null>(null);
-  const navigate = useNavigate();
 
   const handleInputChange = (
     field: keyof typeof formData,
@@ -137,83 +139,85 @@ export default function PublicApply() {
   }
 
   return (
-    <Paper p="md" maw={600} mx="auto" mt="xl" withBorder>
-      <form onSubmit={handleSubmit}>
-        <Stack gap="md">
-          <Title order={2}>Job Application</Title>
-          <Text c="dimmed" mb="md">
-            Please fill out the form below to apply for the position. Fields
-            marked with * are required.
-          </Text>
+    <Box p="md">
+      <Paper p="xl" radius="md" withBorder style={{ maxWidth: 800 }} mx="auto">
+        <form onSubmit={handleSubmit}>
+          <Stack gap="md">
+            <Title order={2}>Job Application</Title>
+            <Text c="dimmed" mb="md">
+              Please fill out the form below to apply for the position. Fields
+              marked with * are required.
+            </Text>
 
-          <TextInput
-            label="Full Name *"
-            value={formData.fullName}
-            onChange={(e) => handleInputChange("fullName", e.target.value)}
-            required
-            placeholder="John Doe"
-          />
+            <TextInput
+              label="Full Name *"
+              value={formData.fullName}
+              onChange={(e) => handleInputChange("fullName", e.target.value)}
+              required
+              placeholder="John Doe"
+            />
 
-          <TextInput
-            label="Email *"
-            type="email"
-            value={formData.email}
-            onChange={(e) => handleInputChange("email", e.target.value)}
-            required
-            placeholder="john.doe@example.com"
-          />
+            <TextInput
+              label="Email *"
+              type="email"
+              value={formData.email}
+              onChange={(e) => handleInputChange("email", e.target.value)}
+              required
+              placeholder="john.doe@example.com"
+            />
 
-          <TextInput
-            label="Phone (Optional)"
-            value={formData.phone}
-            onChange={(e) => handleInputChange("phone", e.target.value)}
-            placeholder="+1234567890"
-          />
-          <DateInput
-            label="Date of Birth (Optional)"
-            value={formData.dateOfBirth}
-            onChange={(value) => handleInputChange("dateOfBirth", value)}
-            placeholder="Select date"
-            maxDate={new Date()}
-            valueFormat="YYYY-MM-DD"
-          />
-          <Select
-            label="Position *"
-            placeholder="Select a position"
-            data={POSITIONS}
-            value={formData.position}
-            onChange={(value) => handleInputChange("position", value || "")}
-            searchable
-            required
-          />
+            <TextInput
+              label="Phone (Optional)"
+              value={formData.phone}
+              onChange={(e) => handleInputChange("phone", e.target.value)}
+              placeholder="+1234567890"
+            />
+            <DateInput
+              label="Date of Birth (Optional)"
+              value={formData.dateOfBirth}
+              onChange={(value) => handleInputChange("dateOfBirth", value)}
+              placeholder="Select date"
+              maxDate={new Date()}
+              valueFormat="YYYY-MM-DD"
+            />
+            <Select
+              label="Position *"
+              placeholder="Select a position"
+              data={POSITIONS}
+              value={formData.position}
+              onChange={(value) => handleInputChange("position", value || "")}
+              searchable
+              required
+            />
 
-          <FileInput
-            label="Upload Photo (Optional, Max 2MB)"
-            value={photo}
-            onChange={setPhoto}
-            accept="image/*"
-            placeholder="Click to upload"
-          />
+            <FileInput
+              label="Upload Photo (Optional, Max 2MB)"
+              value={photo}
+              onChange={setPhoto}
+              accept="image/*"
+              placeholder="Click to upload"
+            />
 
-          <FileInput
-            label="Upload CV (Required, PDF only, Max 5MB) *"
-            value={cv}
-            onChange={setCv}
-            accept=".pdf"
-            required
-            placeholder="Click to upload"
-          />
+            <FileInput
+              label="Upload CV (Required, PDF only, Max 5MB) *"
+              value={cv}
+              onChange={setCv}
+              accept=".pdf"
+              required
+              placeholder="Click to upload"
+            />
 
-          <Button
-            type="submit"
-            size="lg"
-            loading={submitApplication.isPending}
-            mt="md"
-          >
-            Submit Application
-          </Button>
-        </Stack>
-      </form>
-    </Paper>
+            <Button
+              type="submit"
+              size="lg"
+              loading={submitApplication.isPending}
+              mt="md"
+            >
+              Submit Application
+            </Button>
+          </Stack>
+        </form>
+      </Paper>
+    </Box>
   );
 }

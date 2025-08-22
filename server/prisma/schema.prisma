@@ -13,70 +13,82 @@ model Applicant {
   email           String        @unique
   phone           String?
   position        String
-  status          String        @default("PENDING")
-  photoPath       String?
-  cvPath          String?
-  coverLetterPath String?
-  notes           String?
+  status          DefaultStatus @default(PENDING)
+  dateOfBirth     DateTime?
   appliedAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
   updatedBy       String?
   applications    Application[]
-  createdBy       User?         @relation(fields: [createdById], references: [id])
+  createdBy       User?         @relation("CreatedByUser", fields: [createdById], references: [id])
   createdById     Int?
 
-  @@map("WSAT_applicants")
   @@index([status])
   @@index([email])
+  @@map("WSAT_applicants")
 }
 
 model Application {
-  id          Int       @id @default(autoincrement())
-  applicant   Applicant @relation(fields: [applicantId], references: [id])
+  id          Int           @id @default(autoincrement())
+  applicant   Applicant     @relation(fields: [applicantId], references: [id])
   applicantId Int
-  status      String    @default("PENDING")
+  status      DefaultStatus @default(PENDING)
   notes       String?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  files       File[]
 
   @@map("applications")
 }
 
-model UserSession {
-  id           Int       @id @default(autoincrement())
-  userId       Int
-  accessToken  String    @unique
-  userAgent    String?
-  ipAddress    String?
-  isActive     Boolean   @default(true)
-  loginAt      DateTime  @default(now())
-  logoutAt     DateTime?
-  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  expiresAt    DateTime
-  updatedAt    DateTime  @updatedAt
+model File {
+  id            Int           @id @default(autoincrement())
+  filePath      String
+  fileType      FileType
+  application   Application   @relation(fields: [applicationId], references: [id])
+  applicationId Int
+  uploader      User?         @relation(fields: [uploaderId], references: [id])
+  uploaderId    Int?
+  createdAt     DateTime      @default(now())
 
-  @@map("user_sessions")
+  @@map("WSAT_files")
+}
+
+model UserSession {
+  id          Int       @id @default(autoincrement())
+  userId      Int
+  accessToken String    @unique
+  userAgent   String?
+  ipAddress   String?
+  isActive    Boolean   @default(true)
+  loginAt     DateTime  @default(now())
+  logoutAt    DateTime?
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt   DateTime
+  updatedAt   DateTime  @updatedAt
+
   @@index([accessToken])
   @@index([userId])
+  @@map("user_sessions")
 }
 
 model User {
-  id                Int            @id @default(autoincrement())
-  email             String         @unique
+  id                Int           @id @default(autoincrement())
+  email             String        @unique
   passwordHash      String
-  role              UserRole       @default(ADMIN)
+  role              UserRole      @default(ADMIN)
   firstName         String?
   lastName          String?
   phoneNumber       String?
-  isActive          Boolean        @default(true)
+  isActive          Boolean       @default(true)
   lastLogin         DateTime?
-  createdAt         DateTime       @default(now())
-  updatedAt         DateTime       @updatedAt
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
   sessions          UserSession[]
-  createdApplicants Applicant[]
+  files             File[]
+  createdApplicants Applicant[]    @relation("CreatedByUser")
 
-  @@map("WSAT_User")
   @@index([email])
+  @@map("WSAT_User")
 }
 
 enum UserRole {
@@ -91,4 +103,9 @@ enum DefaultStatus {
   PASS_INTERVIEW
   REJECT_INTERVIEW
   REJECT
+}
+
+enum FileType {
+  CV
+  PHOTO
 }
