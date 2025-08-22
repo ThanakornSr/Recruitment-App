@@ -83,7 +83,7 @@ A full-stack recruitment management system built with modern web technologies. T
 3. **Set up the frontend**
 
    ```bash
-   cd ../web
+   cd web
    cp .env.example .env  # Update environment variables as needed
    npm install
 
