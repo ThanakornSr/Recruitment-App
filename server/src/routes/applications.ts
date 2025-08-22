@@ -416,13 +416,13 @@ adminRouter.put(
     try {
       const { id } = req.params;
       const { interviewDate, notes } = req.body;
-      const userId = (req as any).user.id;
 
       const application = await prisma.application.update({
         where: { id: parseInt(id) },
         data: {
           status: "WAIT_RESULT",
           notes,
+          interviewDate: new Date(interviewDate),
           updatedAt: new Date(),
         },
         include: { applicant: true },

@@ -154,8 +154,15 @@ export default function AdminDashboard() {
 
     try {
       if (newStatus === "WAIT_RESULT" && interviewDateParam) {
+        const dateObj =
+          interviewDateParam instanceof Date
+            ? interviewDateParam
+            : new Date(interviewDateParam);
+
+        if (isNaN(dateObj.getTime())) throw new Error("Invalid interview date");
+
         await api.put(`/admin/applications/${row.id}/approve`, {
-          interviewDate: interviewDateParam.toISOString(),
+          interviewDate: dateObj.toISOString(),
           notes: notes || "Interview scheduled",
         });
       } else if (newStatus === "REJECT") {

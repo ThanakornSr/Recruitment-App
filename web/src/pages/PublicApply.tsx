@@ -59,25 +59,24 @@ export default function PublicApply() {
 
       Object.entries(formData).forEach(([key, value]) => {
         if (value !== null && value !== "") {
-          formDataToSend.append(key, value.toString());
+          if (value instanceof Date) {
+            formDataToSend.append(key, value.toISOString());
+          } else {
+            formDataToSend.append(key, value.toString());
+          }
         }
       });
 
-      if (photo) {
-        formDataToSend.append("photo", photo);
-      }
-      if (cv) {
-        formDataToSend.append("cv", cv);
-      }
+      if (photo) formDataToSend.append("photo", photo);
+      if (cv) formDataToSend.append("cv", cv);
 
       const response = await api.post("/applications/submit", formDataToSend, {
-        headers: {
-          "Content-Type": "multipart/form-data",
-        },
+        headers: { "Content-Type": "multipart/form-data" },
       });
 
       return response.data;
     },
+
     onSuccess: (data) => {
       notifications.show({
         title: "Success!",

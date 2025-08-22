@@ -28,14 +28,15 @@ model Applicant {
 }
 
 model Application {
-  id          Int           @id @default(autoincrement())
-  applicant   Applicant     @relation(fields: [applicantId], references: [id])
-  applicantId Int
-  status      DefaultStatus @default(PENDING)
-  notes       String?
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
-  files       File[]
+  id            Int           @id @default(autoincrement())
+  applicant     Applicant     @relation(fields: [applicantId], references: [id])
+  applicantId   Int
+  status        DefaultStatus @default(PENDING)
+  notes         String?
+  interviewDate DateTime?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  files         File[]
 
   @@map("applications")
 }
